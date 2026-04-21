@@ -10,6 +10,7 @@ class Obsidian():
             protocol: str = os.getenv('OBSIDIAN_PROTOCOL', 'https').lower(),
             host: str = str(os.getenv('OBSIDIAN_HOST', '127.0.0.1')),
             port: int = int(os.getenv('OBSIDIAN_PORT', '27124')),
+            url_base: int = int(os.getenv('OBSIDIAN_URL', ''))
             verify_ssl: bool = False,
         ):
         self.api_key = api_key
@@ -23,9 +24,13 @@ class Obsidian():
         self.port = port
         self.verify_ssl = verify_ssl
         self.timeout = (3, 6)
+        self.url_base = url_base
 
     def get_base_url(self) -> str:
-        return f'{self.protocol}://{self.host}:{self.port}'
+        if url_base != '':
+            return f'{self.url_base}'
+        else:
+            return f'{self.protocol}://{self.host}:{self.port}'
     
     def _get_headers(self) -> dict:
         headers = {
