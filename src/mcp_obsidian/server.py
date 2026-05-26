@@ -1,21 +1,25 @@
-import json
 import logging
-from collections.abc import Sequence
-from functools import lru_cache
-from typing import Any
 import os
+from collections.abc import Sequence
+from typing import Any
 from dotenv import load_dotenv
 from mcp.server import Server
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import (
     Tool,
     TextContent,
     ImageContent,
     EmbeddedResource,
 )
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+from starlette.types import Receive, Scope, Send
 
 load_dotenv()
 
-from . import tools
+from . import obsidian, tools
 
 # Load environment variables
 
@@ -23,11 +27,20 @@ from . import tools
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp-obsidian")
 
-api_key = os.getenv("OBSIDIAN_API_KEY")
-if not api_key:
-    raise ValueError(f"OBSIDIAN_API_KEY environment variable required. Working directory: {os.getcwd()}")
+obsidian.Obsidian()
 
 app = Server("mcp-obsidian")
+
+def get_path_env(name: str, default: str) -> str:
+    value = os.getenv(name, default).strip() or default
+    if not value.startswith("/"):
+        value = f"/{value}"
+    return value.rstrip("/") or "/"
+
+
+MCP_HOST = os.getenv("MCP_HOST", "127.0.0.1")
+MCP_PORT = int(os.getenv("MCP_PORT", "8000"))
+MCP_HTTP_PATH = get_path_env("MCP_HTTP_PATH", "/mcp")
 
 tool_handlers = {}
 def add_tool_handler(tool_class: tools.ToolHandler):
@@ -80,14 +93,48 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent | ImageCo
         raise RuntimeError(f"Caught Exception. Error: {str(e)}")
 
 
+async def health(_: Request) -> JSONResponse:
+    return JSONResponse({"status": "ok", "server": "mcp-obsidian"})
+
+
+async def server_info(_: Request) -> JSONResponse:
+    return JSONResponse({
+        "server": "mcp-obsidian",
+        "transport": "streamable-http",
+        "mcp_url": f"http://{MCP_HOST}:{MCP_PORT}{MCP_HTTP_PATH}",
+    })
+
+
+class StreamableHTTPASGIApp:
+    def __init__(self, session_manager: StreamableHTTPSessionManager):
+        self.session_manager = session_manager
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await self.session_manager.handle_request(scope, receive, send)
+
+
+def create_http_app() -> Starlette:
+    session_manager = StreamableHTTPSessionManager(app=app)
+    return Starlette(
+        routes=[
+            Route("/", endpoint=server_info, methods=["GET"]),
+            Route("/health", endpoint=health, methods=["GET"]),
+            Route(MCP_HTTP_PATH, endpoint=StreamableHTTPASGIApp(session_manager)),
+        ],
+        lifespan=lambda _: session_manager.run(),
+    )
+
+
 async def main():
+    import uvicorn
 
-    # Import here to avoid issues with event loops
-    from mcp.server.stdio import stdio_server
+    logger.info("Starting mcp-obsidian Streamable HTTP server at http://%s:%s%s", MCP_HOST, MCP_PORT, MCP_HTTP_PATH)
 
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream,
-            write_stream,
-            app.create_initialization_options()
-        )
+    config = uvicorn.Config(
+        create_http_app(),
+        host=MCP_HOST,
+        port=MCP_PORT,
+        log_level="info",
+    )
+    server = uvicorn.Server(config)
+    await server.serve()

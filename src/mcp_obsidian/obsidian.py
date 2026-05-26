@@ -3,34 +3,76 @@ import urllib.parse
 import os
 from typing import Any
 
+DEFAULT_PROTOCOL = "http"
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 27123
+
+
+def _get_env(name: str, default: str) -> str:
+    value = os.getenv(name, default).strip()
+    return value or default
+
+
+def _get_required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise ValueError(f"{name} environment variable required. Working directory: {os.getcwd()}")
+    return value
+
+
+def _get_int_env(name: str, default: int) -> int:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer. Got: {value}") from exc
+
+
+def _get_bool_env(name: str, default: bool) -> bool:
+    value = os.getenv(name, "").strip().lower()
+    if not value:
+        return default
+
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+
+    raise ValueError(f"{name} must be true or false. Got: {value}")
+
+
+def _normalize_protocol(protocol: str) -> str:
+    protocol = protocol.strip().lower()
+    if protocol not in {"http", "https"}:
+        raise ValueError(f"OBSIDIAN_PROTOCOL must be http or https. Got: {protocol}")
+    return protocol
+
+
 class Obsidian():
     def __init__(
             self, 
-            api_key: str,
-            protocol: str = os.getenv('OBSIDIAN_PROTOCOL', 'https').lower(),
-            host: str = str(os.getenv('OBSIDIAN_HOST', '127.0.0.1')),
-            port: int = int(os.getenv('OBSIDIAN_PORT', '27124')),
-            url_base: int = int(os.getenv('OBSIDIAN_URL', ''))
-            verify_ssl: bool = False,
+            api_key: str | None = None,
+            protocol: str | None = None,
+            host: str | None = None,
+            port: int | str | None = None,
+            url_base: str | None = None,
+            verify_ssl: bool | None = None,
         ):
-        self.api_key = api_key
-        
-        if protocol == 'http':
-            self.protocol = 'http'
-        else:
-            self.protocol = 'https' # Default to https for any other value, including 'https'
-
-        self.host = host
-        self.port = port
-        self.verify_ssl = verify_ssl
+        self.api_key = api_key or _get_required_env("OBSIDIAN_API_KEY")
+        self.protocol = _normalize_protocol(protocol or _get_env("OBSIDIAN_PROTOCOL", DEFAULT_PROTOCOL))
+        self.host = host or _get_env("OBSIDIAN_HOST", DEFAULT_HOST)
+        self.port = int(port) if port is not None else _get_int_env("OBSIDIAN_PORT", DEFAULT_PORT)
+        self.url_base = (url_base if url_base is not None else os.getenv("OBSIDIAN_URL", "")).strip().rstrip("/")
+        self.verify_ssl = verify_ssl if verify_ssl is not None else _get_bool_env("OBSIDIAN_VERIFY_SSL", False)
         self.timeout = (3, 6)
-        self.url_base = url_base
 
     def get_base_url(self) -> str:
-        if url_base != '':
-            return f'{self.url_base}'
-        else:
-            return f'{self.protocol}://{self.host}:{self.port}'
+        if self.url_base:
+            return self.url_base
+        return f'{self.protocol}://{self.host}:{self.port}'
     
     def _get_headers(self) -> dict:
         headers = {

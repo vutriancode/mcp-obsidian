@@ -29,41 +29,62 @@ The use prompts like this:
 
 ## Configuration
 
-### Obsidian REST API Key
+### Obsidian REST API settings
 
-There are two ways to configure the environment with the Obsidian REST API Key. 
+The server reads Obsidian REST API settings from environment variables. For local
+development, create a `.env` file in the working directory:
 
-1. Add to server config (preferred)
+```
+OBSIDIAN_API_KEY=your_api_key_here
+OBSIDIAN_PROTOCOL=http
+OBSIDIAN_HOST=127.0.0.1
+OBSIDIAN_PORT=27123
+OBSIDIAN_URL=
+OBSIDIAN_VERIFY_SSL=false
+
+MCP_HOST=127.0.0.1
+MCP_PORT=8000
+MCP_HTTP_PATH=/mcp
+```
+
+You can also copy `.env.example` and fill in the values from the Obsidian Local
+REST API plugin config.
+
+If you prefer putting the variables directly in the MCP client config:
 
 ```json
 {
   "mcp-obsidian": {
-    "command": "uvx",
+    "command": "uv",
     "args": [
+      "--directory",
+      "<dir_to>/mcp-obsidian",
+      "run",
       "mcp-obsidian"
     ],
     "env": {
       "OBSIDIAN_API_KEY": "<your_api_key_here>",
-      "OBSIDIAN_HOST": "<your_obsidian_host>",
-      "OBSIDIAN_PORT": "<your_obsidian_port>"
+      "OBSIDIAN_PROTOCOL": "http",
+      "OBSIDIAN_HOST": "127.0.0.1",
+      "OBSIDIAN_PORT": "27123",
+      "MCP_HOST": "127.0.0.1",
+      "MCP_PORT": "8000",
+      "MCP_HTTP_PATH": "/mcp"
     }
   }
 }
 ```
 Sometimes Claude has issues detecting the location of uv / uvx. You can use `which uvx` to find and paste the full path in above config in such cases.
 
-2. Create a `.env` file in the working directory with the following required variables:
-
-```
-OBSIDIAN_API_KEY=your_api_key_here
-OBSIDIAN_HOST=your_obsidian_host
-OBSIDIAN_PORT=your_obsidian_port
-```
-
 Note:
 - You can find the API key in the Obsidian plugin config
-- Default port is 27124 if not specified
+- Default protocol is http
+- Default port is 27123 if not specified
 - Default host is 127.0.0.1 if not specified
+- If you use https, set `OBSIDIAN_PROTOCOL=https` and usually `OBSIDIAN_PORT=27124`
+- `OBSIDIAN_URL` is optional and overrides protocol, host, and port when set
+- MCP web service defaults to `http://127.0.0.1:8000`
+- MCP Streamable HTTP endpoint defaults to `http://127.0.0.1:8000/mcp`
 
 ## Quickstart
 
@@ -97,8 +118,12 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
       ],
       "env": {
         "OBSIDIAN_API_KEY": "<your_api_key_here>",
-        "OBSIDIAN_HOST": "<your_obsidian_host>",
-        "OBSIDIAN_PORT": "<your_obsidian_port>"
+        "OBSIDIAN_PROTOCOL": "http",
+        "OBSIDIAN_HOST": "127.0.0.1",
+        "OBSIDIAN_PORT": "27123",
+        "MCP_HOST": "127.0.0.1",
+        "MCP_PORT": "8000",
+        "MCP_HTTP_PATH": "/mcp"
       }
     }
   }
@@ -119,8 +144,12 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
       ],
       "env": {
         "OBSIDIAN_API_KEY": "<YOUR_OBSIDIAN_API_KEY>",
-        "OBSIDIAN_HOST": "<your_obsidian_host>",
-        "OBSIDIAN_PORT": "<your_obsidian_port>"
+        "OBSIDIAN_PROTOCOL": "http",
+        "OBSIDIAN_HOST": "127.0.0.1",
+        "OBSIDIAN_PORT": "27123",
+        "MCP_HOST": "127.0.0.1",
+        "MCP_PORT": "8000",
+        "MCP_HTTP_PATH": "/mcp"
       }
     }
   }
@@ -139,18 +168,30 @@ To prepare the package for distribution:
 uv sync
 ```
 
+### Running
+
+Start the MCP HTTP service:
+
+```bash
+uv run mcp-obsidian
+```
+
+Default URLs:
+
+- Health check: `http://127.0.0.1:8000/health`
+- MCP Streamable HTTP endpoint: `http://127.0.0.1:8000/mcp`
+
 ### Debugging
 
-Since MCP servers run over stdio, debugging can be challenging. For the best debugging
-experience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).
+For the best debugging experience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).
 
 You can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:
 
 ```bash
-npx @modelcontextprotocol/inspector uv --directory /path/to/mcp-obsidian run mcp-obsidian
+npx @modelcontextprotocol/inspector
 ```
 
-Upon launching, the Inspector will display a URL that you can access in your browser to begin debugging.
+After launching, connect it to the Streamable HTTP URL: `http://127.0.0.1:8000/mcp`.
 
 You can also watch the server logs with this command:
 
